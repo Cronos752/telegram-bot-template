@@ -44,6 +44,7 @@ class Settings:
     log_level: str
     webhook: WebhookConfig
     db: DbConfig
+    admin_ids: list[int]
 
 
 _LOGGER: Final = logging.getLogger(__name__)
@@ -60,6 +61,25 @@ def _get_env(name: str, default: str | None = None, *, required: bool = False) -
     if required and not value:
         raise RuntimeError(f"Missing required environment variable: {name}")
     return value or ""
+
+
+def _parse_admin_ids(raw: str | None) -> list[int]:
+    """Parsa ADMIN_IDS in una lista di interi.
+
+    Esempio: "123,456,789" -> [123, 456, 789]
+    """
+    if not raw:
+        return []
+    result: list[int] = []
+    for part in raw.split(","):
+        part = part.strip()
+        if not part:
+            continue
+        try:
+            result.append(int(part))
+        except ValueError:
+            _LOGGER.warning("ADMIN_IDS contiene un valore non valido: %r", part)
+    return result
 
 
 def load_settings() -> Settings:
@@ -128,20 +148,26 @@ def load_settings() -> Settings:
         secret=webhook_secret,
     )
 
+    # --- ADMIN IDS ---
+    raw_admin_ids = os.getenv("ADMIN_IDS", "")
+    admin_ids = _parse_admin_ids(raw_admin_ids)
+
     settings = Settings(
         bot_token=bot_token,
         log_level=log_level,
         webhook=webhook,
         db=db,
+        admin_ids=admin_ids,
     )
 
     # Log di riepilogo (senza segreti)
     _LOGGER.info(
-        "Configurazione caricata: db_host=%s db_name=%s webhook_url=%s log_level=%s",
+        "Configurazione caricata: db_host=%s db_name=%s webhook_url=%s log_level=%s admin_count=%d",
         settings.db.host,
         settings.db.name,
         settings.webhook.url,
         settings.log_level,
+        len(settings.admin_ids),
     )
 
     return settings
