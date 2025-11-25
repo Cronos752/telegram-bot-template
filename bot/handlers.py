@@ -13,24 +13,23 @@ logger = logging.getLogger(__name__)
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Handler semplice per /start."""
+    """Handler per /start: messaggio breve in inglese."""
     if not update.effective_user or not update.effective_chat:
         return
 
-    first_name = update.effective_user.first_name or "lì"
     await update.effective_chat.send_message(
-        f"Ciao {first_name}! Il bot è attivo."
+        "✅ Bot is running correctly."
     )
 
 
 async def myid(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Mostra l'ID Telegram dell'utente, utile per configurare ADMIN_IDS."""
+    """Mostra SOLO l'ID numerico dell'utente (nessun testo extra)."""
     if not update.effective_user or not update.effective_chat:
         return
 
     user_id = update.effective_user.id
-    text = f"Il tuo ID Telegram è:\n`{user_id}`"
-    await update.effective_chat.send_message(text, parse_mode="Markdown")
+    # solo il numero, senza testo
+    await update.effective_chat.send_message(str(user_id))
 
 
 async def admin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -40,11 +39,13 @@ async def admin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
     user_id = update.effective_user.id
     if not is_admin(user_id):
-        await update.effective_chat.send_message("❌ Non sei autorizzato a usare questo comando.")
+        await update.effective_chat.send_message("❌ Access denied.")
         return
 
     # Qui potrai aggiungere la vera logica admin (pannello, statistiche, ecc.)
-    await update.effective_chat.send_message("✅ Sei admin! Qui andranno i comandi amministratore.")
+    await update.effective_chat.send_message(
+        "🛠 You have admin privileges."
+    )
 
 
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -55,7 +56,7 @@ async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> N
     if isinstance(update, Update) and update.effective_chat:
         try:
             await update.effective_chat.send_message(
-                "Si è verificato un errore inatteso. Riprova più tardi."
+                "An unexpected error occurred. Please try again later."
             )
         except Exception:  # pragma: no cover
             logger.exception("Failed to send error message to user")
