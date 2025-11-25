@@ -23,12 +23,14 @@ logger = logging.getLogger(__name__)
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Handler per /start: messaggio breve in inglese su dashboard.
+    """Handler per /start.
 
+    Comportamento:
     - Cancella il messaggio /start dell'utente.
-    - Dashboard (unico messaggio visibile):
-        Last command: /start
+    - Se è la prima volta (o dopo un comando diverso), aggiorna la dashboard con:
         ✅ Bot is running correctly.
+    - Se /start viene ripetuto con lo stesso output, non aggiorna la dashboard:
+      il messaggio del bot rimane com'è.
     """
     if not update.effective_user or not update.effective_chat:
         return
@@ -45,9 +47,7 @@ async def myid(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Mostra SOLO l'ID numerico dell'utente nella dashboard.
 
     - Cancella il messaggio /myid dell'utente.
-    - Dashboard:
-        Last command: /myid
-        <ID numerico>
+    - Se l'ID (output) è identico all'ultima volta, non aggiorna la dashboard.
     """
     if not update.effective_user or not update.effective_chat:
         return
@@ -66,11 +66,11 @@ async def admin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Comando disponibile solo agli admin configurati in ADMIN_IDS.
 
     - Se non admin:
-        Last command: /admin
-        ❌ Access denied.
+        output -> '❌ Access denied.'
+        se viene ripetuto e l'output è lo stesso, la dashboard non cambia.
     - Se admin:
-        Last command: /admin
-        🛠 You have admin privileges.
+        output -> '🛠 You have admin privileges.'
+        idem: ripetere lo stesso comando non trasforma la dashboard.
     """
     if not update.effective_user or not update.effective_chat:
         return
@@ -100,7 +100,7 @@ async def admin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 async def cleanup_other(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Cancella qualsiasi messaggio dell'utente che NON è un comando gestito.
 
-    Non aggiorna la dashboard: rimane visibile l'ultimo comando valido.
+    Non aggiorna la dashboard: rimane visibile l'ultimo output valido.
     """
     message = update.effective_message
     if not message:
@@ -119,14 +119,14 @@ async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> N
     """Gestione globale degli errori.
 
     - Logga l'errore.
-    - Se abbiamo un Update e una chat, aggiorna la dashboard con stato di errore.
+    - Se abbiamo un Update e una chat, aggiorna la dashboard con uno stato di errore.
+      Se l'errore è identico all'ultimo mostrato, la dashboard non verrà riaggiornata.
     """
 
     logger.exception("Exception while handling an update: %s", context.error)
 
     if isinstance(update, Update) and update.effective_chat:
         try:
-            # Proviamo a riusare la stessa logica di trasformazione: una sola dashboard.
             await update_dashboard(
                 update,
                 context,
@@ -134,7 +134,6 @@ async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> N
                 body_text="An unexpected error occurred. Please try again later.",
             )
         except Exception:  # pragma: no cover
-            # Se anche questo fallisce, logghiamo e basta.
             logger.exception("Failed to update dashboard for error.")
 
 
