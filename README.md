@@ -1,148 +1,35 @@
-# Telegram Bot Template
+# Telegram Bot Template (variant 1 - compact package)
 
-Questo progetto è un template minimale per un bot Telegram scritto in **Python**, progettato per girare in un **container Docker** e usare **PostgreSQL** tramite **SQLAlchemy** e **asyncpg**.
+Template di bot Telegram in Python 3.12 con struttura compatta:
 
-È pensato per essere distribuito tramite **Portainer** usando la funzione **Stacks → Repository Git**.
+- `bot/config.py`    → lettura configurazione da `.env`
+- `bot/db.py`        → SQLAlchemy async + modello `User`
+- `bot/handlers.py`  → handler `/start` + error handler globale
+- `bot/main.py`      → crea l'Application e avvia il webhook
 
-🔑 **Principio chiave:** tutte le variabili di configurazione (token, DB, credenziali, log, ecc.) vengono impostate **solo nel file `.env`**. Non è necessario (né consigliato) modificare `docker-compose.yml` o il codice Python per cambiare configurazione.
+Il bot usa:
+- python-telegram-bot (webhook + http2)
+- SQLAlchemy async
+- asyncpg
+- Docker + docker-compose
+- PostgreSQL esterno (container `postgre-sql` esistente)
 
----
+## Configurazione
 
-## Ambiente previsto
+1. Crea/compila il file `.env` nella root del progetto:
+   - `BOT_TOKEN`
+   - parametri `DB_*`
+   - parametri `WEBHOOK_*`
+   - `LOG_LEVEL`
 
-Questo template dà per scontato che esista già un'infrastruttura Docker con:
+2. Deploy da Portainer:
+   - Stack → Git repository con questo progetto
+   - Il servizio `bot` usa:
+     - network esterna `nginx_network`
+     - network esterna `postgre_sql_network`
+     - container PostgreSQL esistente `postgre-sql`
 
-- un container PostgreSQL **già esistente** chiamato `postgre-sql`,
-- un network Docker esistente chiamato `postgre-sql-network`,
-- un network Docker esistente chiamato `nginx-network`, usato anche da Nginx Proxy Manager (o un altro reverse proxy) che gestirà il webhook del bot.
-
-Il container del bot verrà collegato a **entrambi** questi network:
-
-- `nginx-network` → per comunicare con Nginx Proxy Manager (webhook),
-- `postgre-sql-network` → per comunicare con il container `postgre-sql` che ospita il database.
-
-> ⚠️ Il template **non** crea un nuovo container PostgreSQL e **non** crea nuovi network. Usa solo risorse già esistenti.
-
----
-
-## Tecnologie principali
-
-- Python 3.12
-- `python-telegram-bot[http2] >= 21.0.0`
-- `SQLAlchemy >= 2.0`
-- `asyncpg >= 0.29`
-- Docker / Portainer
-- PostgreSQL (container esistente `postgre-sql`)
-
-## Struttura del progetto
-
-```text
-.
-├── docker-compose.yml   # Stack Docker/Portainer, NON modificare le variabili qui
-├── Dockerfile
-├── requirements.txt
-├── .env                  # UNICO file dove cambi le variabili
-└── bot
-    ├── __init__.py
-    ├── config.py
-    ├── main.py
-    ├── db
-    │   ├── __init__.py
-    │   ├── base.py
-    │   └── models.py
-    └── handlers
-        ├── __init__.py
-        ├── start.py
-        └── errors.py
-```
-
----
-
-## Configurazione tramite `.env`
-
-Tutte le variabili usate dal bot vengono definite qui. Il database deve essere già stato creato all'interno del container `postgre-sql` con lo stesso nome/utente/password definiti nel `.env`.
-
-Esempio di `.env`:
-
-```env
-# Token del bot Telegram
-BOT_TOKEN=your_bot_token_here
-
-# Configurazione database PostgreSQL (container esistente `postgre-sql`)
-DB_HOST=postgre-sql
-DB_PORT=5432
-DB_NAME=telegram_bot
-DB_USER=telegram
-DB_PASSWORD=telegram
-
-# Log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
-LOG_LEVEL=INFO
-```
-
-Per cambiare token, nome DB, utente o password, **modifica solo questo file** e fai push sul repository Git.
-
----
-
-## docker-compose.yml (stack per Portainer)
-
-Lo stack:
-
-- **NON** crea un nuovo container PostgreSQL,
-- **NON** crea un nuovo network di default (`telegram_bot_default`),
-- collega il container del bot ai network già esistenti `nginx-network` e `postgre-sql-network`,
-- crea un container chiamato **esattamente** `telegram_bot`.
-
-```yaml
-version: "3.9"
-
-services:
-  bot:
-    build: .
-    container_name: telegram_bot
-    env_file:
-      - .env
-    networks:
-      - default
-      - postgre-sql-network
-    restart: unless-stopped
-
-networks:
-  # Il network di default viene mappato al network esistente usato da Nginx Proxy Manager
-  default:
-    external: true
-    name: nginx-network
-
-  # Network esistente condiviso con il container PostgreSQL `postgre-sql`
-  postgre-sql-network:
-    external: true
-```
-
-> ✅ Il container `telegram_bot` sarà raggiungibile da Nginx Proxy Manager tramite il network `nginx-network`.
-> ✅ Il container `telegram_bot` potrà raggiungere PostgreSQL usando `DB_HOST=postgre-sql` tramite il network `postgre-sql-network`.
-
----
-
-## Distribuzione con Portainer (Repository Git)
-
-1. Crea una repository Git con dentro:
-   - `docker-compose.yml`
-   - `.env`
-   - la cartella `bot/` e il resto del codice.
-2. In Portainer: **Stacks → Add stack → Repository**.
-3. Inserisci l'URL del repository, branch e path (se necessario).
-4. Deploy dello stack.
-
-Quando vorrai aggiornare variabili (token, DB, ecc.):
-
-1. Modifica **solo** il file `.env` nel repository.
-2. `git commit && git push`.
-3. Aggiorna/re-deploy lo stack da Portainer (o usa auto-update se configurato).
-
----
-
-## Comportamento del codice
-
-- `bot/config.py` legge tutte le variabili con `os.getenv(...)` (`BOT_TOKEN`, `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `LOG_LEVEL`).
-- `bot/main.py` non contiene alcun valore di configurazione hardcoded.
-
-In altre parole: una volta impostato il template, **non dovrai più entrare nei file Python o nel `docker-compose.yml` per cambiare la configurazione**, ma solo nello `.env`.
+3. Il bot parte **solo in modalità webhook**:
+   - ascolta su `WEBHOOK_HOST:WEBHOOK_PORT` dentro il container
+   - espone la route HTTP `WEBHOOK_PATH`
+   - registra il webhook su `WEBHOOK_URL`
