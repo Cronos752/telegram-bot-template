@@ -34,8 +34,8 @@ async def _setup_bot_commands(application: Application) -> None:
         settings = load_settings()
 
     base_commands = [
-        BotCommand("start", "Avvia il bot"),
-        BotCommand("myid", "Mostra il tuo ID Telegram"),
+        BotCommand("start", "🚀 Start the bot"),
+        BotCommand("myid", "🆔 Show your Telegram ID"),
     ]
 
     # Comandi per tutti gli utenti nelle chat private
@@ -46,7 +46,7 @@ async def _setup_bot_commands(application: Application) -> None:
 
     # Comandi specifici per ciascun admin (override a livello di chat privata)
     admin_commands = base_commands + [
-        BotCommand("admin", "Comandi amministratore"),
+        BotCommand("admin", "🛠 Admin commands"),
     ]
 
     for admin_id in settings.admin_ids:
