@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 
+from telegram import BotCommand, BotCommandScopeAllPrivateChats, BotCommandScopeUser
 from telegram.ext import Application, ApplicationBuilder
 
 from .config import load_settings
@@ -17,9 +18,43 @@ async def _setup_db(application: Application) -> None:
         await conn.run_sync(Base.metadata.create_all)
 
 
+async def _setup_bot_commands(application: Application) -> None:
+    """Imposta i comandi visibili nel menu di Telegram.
+
+    - Tutti vedono: /start, /myid
+    - Gli admin (ADMIN_IDS) vedono anche: /admin
+    """
+    settings = application.bot_data.get("settings")
+    if settings is None:
+        settings = load_settings()
+
+    base_commands = [
+        BotCommand("start", "Avvia il bot"),
+        BotCommand("myid", "Mostra il tuo ID Telegram"),
+    ]
+
+    # Comandi per tutti gli utenti nelle chat private
+    await application.bot.set_my_commands(
+        base_commands,
+        scope=BotCommandScopeAllPrivateChats(),
+    )
+
+    # Comandi specifici per ciascun admin (override a livello utente)
+    admin_commands = base_commands + [
+        BotCommand("admin", "Comandi amministratore"),
+    ]
+
+    for admin_id in settings.admin_ids:
+        await application.bot.set_my_commands(
+            admin_commands,
+            scope=BotCommandScopeUser(admin_id),
+        )
+
+
 async def _on_startup(application: Application) -> None:
     """Hook eseguito dopo l'inizializzazione dell'app."""
     await _setup_db(application)
+    await _setup_bot_commands(application)
 
 
 async def _on_shutdown(application: Application) -> None:  # pragma: no cover
@@ -50,6 +85,9 @@ def main() -> None:
         .post_shutdown(_on_shutdown)
         .build()
     )
+
+    # Rendo disponibile settings nello state dell'application
+    application.bot_data["settings"] = settings
 
     register_handlers(application)
 
