@@ -3,6 +3,8 @@
 __all__ = [
     "config",
     "db",
+    "auth",
     "handlers",
+    "message_view",
     "main",
 ]
