@@ -4,7 +4,11 @@ from __future__ import annotations
 
 import logging
 
-from telegram import BotCommand, BotCommandScopeAllPrivateChats, BotCommandScopeUser
+from telegram import (
+    BotCommand,
+    BotCommandScopeAllPrivateChats,
+    BotCommandScopeChat,
+)
 from telegram.ext import Application, ApplicationBuilder
 
 from .config import load_settings
@@ -23,6 +27,7 @@ async def _setup_bot_commands(application: Application) -> None:
 
     - Tutti vedono: /start, /myid
     - Gli admin (ADMIN_IDS) vedono anche: /admin
+      tramite scope per-chat (chat privata = ID utente).
     """
     settings = application.bot_data.get("settings")
     if settings is None:
@@ -39,15 +44,16 @@ async def _setup_bot_commands(application: Application) -> None:
         scope=BotCommandScopeAllPrivateChats(),
     )
 
-    # Comandi specifici per ciascun admin (override a livello utente)
+    # Comandi specifici per ciascun admin (override a livello di chat privata)
     admin_commands = base_commands + [
         BotCommand("admin", "Comandi amministratore"),
     ]
 
     for admin_id in settings.admin_ids:
+        # Nelle chat private chat_id == user_id
         await application.bot.set_my_commands(
             admin_commands,
-            scope=BotCommandScopeUser(admin_id),
+            scope=BotCommandScopeChat(chat_id=admin_id),
         )
 
 
