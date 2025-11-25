@@ -2,22 +2,19 @@ version: "3.9"
 
 services:
   bot:
-    build: .
     container_name: telegram_bot
+    build: .
+    restart: unless-stopped
     env_file:
       - .env
     networks:
       - default
       - postgre-sql-network
-    restart: unless-stopped
 
 networks:
-  # Il network di default viene mappato al network esistente usato da Nginx Proxy Manager
   default:
     external: true
     name: nginx_network
-
-  # Network esistente condiviso con il container PostgreSQL `postgre-sql`
   postgre-sql-network:
     external: true
     name: postgre_sql_network
