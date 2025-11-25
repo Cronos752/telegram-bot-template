@@ -1,10 +1,12 @@
-"""Gestione della vista dei messaggi (header + body) per ogni chat.
+"""Gestione della vista a singolo messaggio (dashboard) per ogni chat.
 
-- Cancella sempre il messaggio dell'utente che ha generato il comando.
-- Mantiene esattamente due messaggi del bot per chat:
-  - un header (es. '> /start')
-  - un body (l'output del comando)
-- Ad ogni nuovo comando, edita questi due messaggi invece di crearne di nuovi.
+Regole:
+- Qualsiasi messaggio dell'utente (comandi, testo, upload, ecc.) viene cancellato.
+- In ogni chat esiste al massimo UN solo messaggio del bot ("dashboard").
+- Ad ogni nuovo comando, la dashboard viene EDITATA (edit_message_text)
+  per mostrare:
+    - l'ultimo comando eseguito
+    - l'ultimo output prodotto
 """
 
 from __future__ import annotations
@@ -12,6 +14,7 @@ from __future__ import annotations
 import logging
 
 from telegram import Update
+from telegram.constants import ParseMode
 from telegram.ext import ContextTypes
 
 logger = logging.getLogger(__name__)
@@ -26,77 +29,66 @@ async def _delete_user_message(update: Update) -> None:
     try:
         await message.delete()
     except Exception as exc:  # noqa: BLE001
-        # Non blocchiamo il bot se non riusciamo a cancellare (es. diritti mancanti)
+        # Non blocchiamo il bot se non riusciamo a cancellare (es. diritti mancanti, ecc.)
         logger.debug("Failed to delete user message: %s", exc)
 
 
-async def update_view(
+async def update_dashboard(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,
     command_label: str,
     body_text: str,
 ) -> None:
-    """Aggiorna (o crea) header e body per la chat corrente.
+    """Aggiorna (o crea) la dashboard per la chat corrente.
 
-    - command_label: testo breve del comando (es. '/start', '/myid', '/admin')
-    - body_text: output da mostrare nel body
+    - command_label: nome del comando (es. '/start', '/myid', '/admin', 'ERROR')
+    - body_text: testo dell'output da mostrare
+
+    La dashboard è un singolo messaggio del bot che contiene:
+      *Last command*: `<command_label>`
+      <body_text>
     """
     if not update.effective_chat:
         return
 
     chat_id = update.effective_chat.id
 
-    # 1) Cancella il messaggio dell'utente
+    # 1) Cancella SEMPRE il messaggio dell'utente
     await _delete_user_message(update)
 
     chat_data = context.chat_data
 
-    header_id = chat_data.get("header_message_id")
-    body_id = chat_data.get("body_message_id")
+    dashboard_id = chat_data.get("dashboard_message_id")
 
-    header_text = f"> {command_label}"
+    text = (
+        f"*Last command*: `{command_label}`\n\n"
+        f"{body_text}"
+    )
 
-    # 2) Header: crea o edita
-    if header_id is None:
-        # Non esiste ancora: creiamo un nuovo header
-        sent_header = await context.bot.send_message(
+    # 2) Crea o edita la dashboard
+    if dashboard_id is None:
+        # Non esiste ancora: creiamo un nuovo messaggio
+        sent = await context.bot.send_message(
             chat_id=chat_id,
-            text=header_text,
+            text=text,
+            parse_mode=ParseMode.MARKDOWN,
         )
-        chat_data["header_message_id"] = sent_header.message_id
-    else:
-        try:
-            await context.bot.edit_message_text(
-                chat_id=chat_id,
-                message_id=header_id,
-                text=header_text,
-            )
-        except Exception as exc:  # noqa: BLE001
-            logger.debug("Failed to edit header message, sending new one: %s", exc)
-            sent_header = await context.bot.send_message(
-                chat_id=chat_id,
-                text=header_text,
-            )
-            chat_data["header_message_id"] = sent_header.message_id
+        chat_data["dashboard_message_id"] = sent.message_id
+        return
 
-    # 3) Body: crea o edita
-    if body_id is None:
-        sent_body = await context.bot.send_message(
+    # Esiste già: proviamo a editarla
+    try:
+        await context.bot.edit_message_text(
             chat_id=chat_id,
-            text=body_text,
+            message_id=dashboard_id,
+            text=text,
+            parse_mode=ParseMode.MARKDOWN,
         )
-        chat_data["body_message_id"] = sent_body.message_id
-    else:
-        try:
-            await context.bot.edit_message_text(
-                chat_id=chat_id,
-                message_id=body_id,
-                text=body_text,
-            )
-        except Exception as exc:  # noqa: BLE001
-            logger.debug("Failed to edit body message, sending new one: %s", exc)
-            sent_body = await context.bot.send_message(
-                chat_id=chat_id,
-                text=body_text,
-            )
-            chat_data["body_message_id"] = sent_body.message_id
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("Failed to edit dashboard message, sending new one: %s", exc)
+        sent = await context.bot.send_message(
+            chat_id=chat_id,
+            text=text,
+            parse_mode=ParseMode.MARKDOWN,
+        )
+        chat_data["dashboard_message_id"] = sent.message_id
