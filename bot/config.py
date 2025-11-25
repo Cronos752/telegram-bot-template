@@ -22,10 +22,16 @@ class BotConfig:
     db_password: str
     log_level: str = "INFO"
 
+    # Webhook
+    webhook_url: str | None = None
+    webhook_host: str = "0.0.0.0"
+    webhook_port: int = 8080
+    webhook_path: str = "/webhook"
+    webhook_secret_token: str | None = None
+
     @property
     def database_url(self) -> str:
         """Costruisce la database URL per SQLAlchemy con asyncpg."""
-
         return (
             f"postgresql+asyncpg://{self.db_user}:{self.db_password}"
             f"@{self.db_host}:{self.db_port}/{self.db_name}"
@@ -33,15 +39,17 @@ class BotConfig:
 
 
 def load_config() -> BotConfig:
-    """Carica la configurazione dalle variabili d'ambiente.
-
-    In caso di distribuzione tramite Portainer, tutte queste variabili
-    vanno impostate nel file `.env` referenziato dallo stack.
-    """
+    """Carica la configurazione dalle variabili d'ambiente."""
 
     token = os.getenv("BOT_TOKEN", "")
     if not token:
         raise RuntimeError("BOT_TOKEN non impostata nelle variabili d'ambiente.")
+
+    webhook_url = os.getenv("WEBHOOK_URL")
+    webhook_host = os.getenv("WEBHOOK_HOST", "0.0.0.0")
+    webhook_port = int(os.getenv("WEBHOOK_PORT", "8080"))
+    webhook_path = os.getenv("WEBHOOK_PATH", "/webhook")
+    webhook_secret = os.getenv("WEBHOOK_SECRET") or None
 
     return BotConfig(
         token=token,
@@ -51,4 +59,9 @@ def load_config() -> BotConfig:
         db_user=os.getenv("DB_USER", "telegram"),
         db_password=os.getenv("DB_PASSWORD", "telegram"),
         log_level=os.getenv("LOG_LEVEL", "INFO"),
+        webhook_url=webhook_url,
+        webhook_host=webhook_host,
+        webhook_port=webhook_port,
+        webhook_path=webhook_path,
+        webhook_secret_token=webhook_secret,
     )
