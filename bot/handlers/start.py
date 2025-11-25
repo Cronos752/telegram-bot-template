@@ -1,3 +1,5 @@
+# bot/handlers/start.py
+
 from __future__ import annotations
 
 from telegram import Update
@@ -5,10 +7,11 @@ from telegram.ext import ContextTypes
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Handler per il comando /start."""
+    """Handler semplice per /start, senza DB e senza rate limit."""
+    if not update.effective_user or not update.effective_chat:
+        return
 
-    user = update.effective_user
-    first_name = user.first_name if user is not None else "there"
-
-    if update.message is not None:
-        await update.message.reply_text(f"Ciao {first_name}! Il bot è attivo.")
+    first_name = update.effective_user.first_name or "lì"
+    await update.effective_chat.send_message(
+        f"Ciao {first_name}! Il bot è attivo."
+    )
