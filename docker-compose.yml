@@ -15,8 +15,9 @@ networks:
   # Il network di default viene mappato al network esistente usato da Nginx Proxy Manager
   default:
     external: true
-    name: nginx-network
+    name: nginx_network
 
   # Network esistente condiviso con il container PostgreSQL `postgre-sql`
   postgre-sql-network:
     external: true
+    name: postgre_sql_network
