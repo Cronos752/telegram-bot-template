@@ -43,8 +43,15 @@ def main() -> None:
     # Handler globale per gli errori
     application.add_error_handler(error_handler)
 
-    # Avvio in polling (bloccante)
-    application.run_polling()
+    # Avvio in modalità webhook (bloccante)
+    application.run_webhook(
+        listen=config.webhook_host,
+        port=config.webhook_port,
+        url_path=config.webhook_path.lstrip("/"),
+        webhook_url=config.webhook_url,
+        secret_token=config.webhook_secret_token,
+    )
+
 
 
 if __name__ == "__main__":
