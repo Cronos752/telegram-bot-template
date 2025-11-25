@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
-import asyncio
 import logging
 
-from telegram import Update
 from telegram.ext import Application, ApplicationBuilder
 
 from bot.config import load_settings
@@ -13,21 +11,31 @@ from bot.db import Base, engine
 from bot.handlers import register_handlers
 
 
-async def _setup_db() -> None:
+async def _setup_db(application: Application) -> None:
+    """Crea le tabelle al bootstrap dell'applicazione."""
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
 
-async def _on_startup(app: Application) -> None:
-    await _setup_db()
+async def _on_startup(application: Application) -> None:
+    """Hook eseguito dopo l'inizializzazione dell'app."""
+    await _setup_db(application)
 
 
-async def _on_shutdown(app: Application) -> None:  # pragma: no cover
+async def _on_shutdown(application: Application) -> None:  # pragma: no cover
+    """Hook eseguito in fase di shutdown."""
     # Qui potresti chiudere connessioni, pool, ecc.
+    # Esempio (se vuoi essere super pulito):
+    # await engine.dispose()
     pass
 
 
-async def main() -> None:
+def main() -> None:
+    """Funzione principale SINCRONA.
+
+    Non usare asyncio.run qui, perché run_webhook gestisce da solo
+    l'event loop internamente.
+    """
     settings = load_settings()
 
     logging.basicConfig(
@@ -45,17 +53,17 @@ async def main() -> None:
 
     register_handlers(application)
 
-    # Avvio in modalità webhook
-    await application.run_webhook(
+    # Avvio in modalità webhook (bloccante, gestisce il suo event loop)
+    application.run_webhook(
         listen=settings.webhook.host,
         port=settings.webhook.port,
         url_path=settings.webhook.path.lstrip("/"),
         webhook_url=settings.webhook.url,
         secret_token=settings.webhook.secret,
         drop_pending_updates=True,
-        allowed_updates=Update.ALL_TYPES,
+        # allowed_updates=["message", "callback_query"],  # opzionale
     )
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()
