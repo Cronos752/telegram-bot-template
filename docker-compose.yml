@@ -1,0 +1,39 @@
+version: "3.9"
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: telegram_bot_db
+    environment:
+      # Credenziali del database Postgres
+      POSTGRES_USER: telegram
+      POSTGRES_PASSWORD: telegram
+      POSTGRES_DB: telegram_bot
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    restart: unless-stopped
+
+  bot:
+    build: .
+    container_name: telegram_bot_app
+    environment:
+      # Token del bot Telegram (impostalo nello stack di Portainer)
+      BOT_TOKEN: "sostituisci_con_il_tuo_token"
+
+      # Configurazione database PostgreSQL vista dal container del bot
+      DB_HOST: db
+      DB_PORT: "5432"
+      DB_NAME: telegram_bot
+      DB_USER: telegram
+      DB_PASSWORD: telegram
+
+      # Log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+      LOG_LEVEL: INFO
+    depends_on:
+      - db
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
