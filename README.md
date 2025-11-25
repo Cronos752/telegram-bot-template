@@ -2,7 +2,9 @@
 
 Questo progetto è un template minimale per un bot Telegram scritto in **Python**, progettato per girare in un **container Docker** e usare **PostgreSQL** tramite **SQLAlchemy** e **asyncpg**.
 
-È pensato per essere distribuito facilmente tramite **Portainer** usando la funzione **Stacks**, senza bisogno di file `.env` in produzione: tutte le variabili vengono impostate direttamente nello stack YAML.
+È pensato per essere distribuito tramite **Portainer** usando la funzione **Stacks → Repository Git**.
+
+🔑 **Principio chiave:** tutte le variabili di configurazione (token, DB, credenziali, log, ecc.) vengono impostate **solo nel file `.env`**. Non è necessario (né consigliato) modificare `docker-compose.yml` o il codice Python per cambiare configurazione.
 
 ## Tecnologie principali
 
@@ -10,16 +12,17 @@ Questo progetto è un template minimale per un bot Telegram scritto in **Python*
 - `python-telegram-bot[http2] >= 21.0.0`
 - `SQLAlchemy >= 2.0`
 - `asyncpg >= 0.29`
-- Docker (Docker Engine / Portainer)
+- Docker / Portainer
 - PostgreSQL
 
 ## Struttura del progetto
 
 ```text
 .
-├── docker-compose.yml   # Può essere usato come stack YAML in Portainer
+├── docker-compose.yml   # Stack Docker/Portainer, NON modificare le variabili qui
 ├── Dockerfile
 ├── requirements.txt
+├── .env                  # UNICO file dove cambi le variabili
 └── bot
     ├── __init__.py
     ├── config.py
@@ -34,54 +37,87 @@ Questo progetto è un template minimale per un bot Telegram scritto in **Python*
         └── errors.py
 ```
 
-## Distribuzione tramite Portainer (Stacks)
+## Configurazione tramite `.env`
 
-1. Apri Portainer → **Stacks** → **Add stack**.
-2. Copia e incolla il contenuto di `docker-compose.yml` nel form YAML.
-3. Modifica SOLO i valori delle variabili nella sezione `environment:` secondo le tue esigenze, ad esempio:
+Tutte le variabili usate da Postgres e dal bot vengono definite qui.
+
+```env
+# Token del bot Telegram
+BOT_TOKEN=your_bot_token_here
+
+# Configurazione database PostgreSQL
+DB_HOST=db
+DB_PORT=5432
+DB_NAME=telegram_bot
+DB_USER=telegram
+DB_PASSWORD=telegram
+
+# Log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+LOG_LEVEL=INFO
+```
+
+Per cambiare token, nome DB, utente o password, **modifica solo questo file** e fai push sul repository Git.
+
+## docker-compose.yml (stack per Portainer)
+
+Lo stack usa il file `.env` sia per:
+
+- passare le variabili ai container,
+- risolvere i valori `POSTGRES_*` tramite sostituzione `${VAR}`.
 
 ```yaml
+version: "3.9"
+
 services:
   db:
     image: postgres:16-alpine
+    container_name: telegram_bot_db
+    env_file:
+      - .env
     environment:
-      POSTGRES_USER: mio_utente
-      POSTGRES_PASSWORD: mia_password
-      POSTGRES_DB: mio_database
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    restart: unless-stopped
 
   bot:
     build: .
-    environment:
-      BOT_TOKEN: "123456:ABC-DEF..."  # Token reale del bot
-      DB_HOST: db
-      DB_PORT: "5432"
-      DB_NAME: mio_database
-      DB_USER: mio_utente
-      DB_PASSWORD: mia_password
-      LOG_LEVEL: INFO
+    container_name: telegram_bot_app
+    env_file:
+      - .env
+    depends_on:
+      - db
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
 ```
 
-> ✅ **Importante:** non devi modificare il codice Python per cambiare nome DB, password, utente, ecc. Basta aggiornare questi valori nello stack di Portainer.
+In questo file **non è necessario modificare nulla** per cambiare la configurazione.
 
-4. Fai **Deploy the stack**.
+## Distribuzione con Portainer (Repository Git)
 
-Portainer creerà i due servizi:
+1. Crea una repository Git con dentro:
+   - `docker-compose.yml`
+   - `.env`
+   - la cartella `bot/` e il resto del codice.
+2. In Portainer: **Stacks → Add stack → Repository**.
+3. Inserisci l'URL del repository, branch e path (se necessario).
+4. Deploy dello stack.
 
-- `db` → container PostgreSQL configurato con le variabili `POSTGRES_*`.
-- `bot` → container con il bot Telegram che legge le variabili `BOT_TOKEN`, `DB_*`, `LOG_LEVEL`.
+Quando vorrai aggiornare variabili (token, DB, ecc.):
 
-## Esecuzione locale opzionale
+1. Modifica **solo** il file `.env` nel repository.
+2. `git commit && git push`.
+3. Aggiorna/re-deploy lo stack da Portainer (o usa auto-update se configurato).
 
-Se vuoi, puoi anche eseguire il progetto in locale con Docker Compose:
+## Comportamento del codice
 
-```bash
-docker-compose up --build
-```
+- `bot/config.py` legge tutte le variabili con `os.getenv(...)` (`BOT_TOKEN`, `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `LOG_LEVEL`).
+- `bot/main.py` non contiene alcun valore di configurazione hardcoded.
 
-In questo caso userai le variabili già presenti nel `docker-compose.yml`.
-
-## Prossimi passi
-
-- Aggiungere nuovi handler dentro `bot/handlers/`.
-- Definire nuovi modelli SQLAlchemy in `bot/db/models.py`.
-- Integrare eventualmente un sistema di migrazioni (es. Alembic).
+In altre parole: una volta impostato il template, **non dovrai più entrare nei file Python per cambiare la configurazione**, ma solo nello `.env`.
