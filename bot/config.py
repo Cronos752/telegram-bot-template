@@ -1,67 +1,148 @@
-from __future__ import annotations
-
-from dataclasses import dataclass
-import os
-
 """Configurazione centrale del bot.
 
-Tutta la configurazione del bot viene letta da variabili d'ambiente.
+Tutta la configurazione viene letta da variabili d'ambiente (.env).
 
 Quando distribuisci con Portainer (Stack), imposta queste variabili
 nel file `.env` e **non** modificare i valori qui nel codice.
 """
 
+from __future__ import annotations
 
-@dataclass
-class BotConfig:
-    token: str
-    db_host: str
-    db_port: int
-    db_name: str
-    db_user: str
-    db_password: str
-    log_level: str = "INFO"
+from dataclasses import dataclass
+import logging
+import os
+from typing import Final
 
-    # Webhook
-    webhook_url: str | None = None
-    webhook_host: str = "0.0.0.0"
-    webhook_port: int = 8080
-    webhook_path: str = "/webhook"
-    webhook_secret_token: str | None = None
 
-    @property
-    def database_url(self) -> str:
-        """Costruisce la database URL per SQLAlchemy con asyncpg."""
-        return (
-            f"postgresql+asyncpg://{self.db_user}:{self.db_password}"
-            f"@{self.db_host}:{self.db_port}/{self.db_name}"
+@dataclass(slots=True)
+class WebhookConfig:
+    """Configurazione del webhook Telegram."""
+
+    url: str
+    host: str
+    port: int
+    path: str
+    secret: str | None
+
+
+@dataclass(slots=True)
+class DbConfig:
+    """Configurazione di connessione al database PostgreSQL."""
+
+    host: str
+    port: int
+    name: str
+    user: str
+    password: str
+
+
+@dataclass(slots=True)
+class Settings:
+    """Configurazione completa del bot."""
+
+    bot_token: str
+    log_level: str
+    webhook: WebhookConfig
+    db: DbConfig
+
+
+_LOGGER: Final = logging.getLogger(__name__)
+
+
+def _get_env(name: str, default: str | None = None, *, required: bool = False) -> str:
+    """Legge una variabile d'ambiente.
+
+    Se `required` è True e la variabile non è presente o vuota,
+    solleva RuntimeError (fail-fast).
+    """
+
+    value = os.getenv(name, default)
+    if required and not value:
+        raise RuntimeError(f"Missing required environment variable: {name}")
+    # se è None e non required, ritorno stringa vuota per semplicità
+    return value or ""
+
+
+def load_settings() -> Settings:
+    """Carica la configurazione dal processo (variabili d'ambiente).
+
+    Se mancano variabili obbligatorie solleva RuntimeError.
+    Esegue anche alcune validazioni base e scrive warning a log.
+    """
+
+    # --- BOT TOKEN ---
+    bot_token = _get_env("BOT_TOKEN", required=True).strip()
+    if not bot_token:
+        raise RuntimeError("BOT_TOKEN non può essere vuoto")
+    if ":" not in bot_token:
+        _LOGGER.warning(
+            "BOT_TOKEN non sembra avere il formato tipico '<id>:<hash>'",
         )
 
+    # --- LOG LEVEL ---
+    log_level = _get_env("LOG_LEVEL", "INFO").upper()
+    valid_levels = {"CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG"}
+    if log_level not in valid_levels:
+        _LOGGER.warning("LOG_LEVEL %r non valido, uso 'INFO' come default", log_level)
+        log_level = "INFO"
 
-def load_config() -> BotConfig:
-    """Carica la configurazione dalle variabili d'ambiente."""
+    # --- WEBHOOK ---
+    webhook_url = _get_env("WEBHOOK_URL", required=True).strip()
+    if not (webhook_url.startswith("http://") or webhook_url.startswith("https://")):
+        _LOGGER.warning(
+            "WEBHOOK_URL %r non inizia con 'http://' o 'https://'", webhook_url,
+        )
 
-    token = os.getenv("BOT_TOKEN", "")
-    if not token:
-        raise RuntimeError("BOT_TOKEN non impostata nelle variabili d'ambiente.")
+    webhook_host = _get_env("WEBHOOK_HOST", "0.0.0.0").strip() or "0.0.0.0"
 
-    webhook_url = os.getenv("WEBHOOK_URL")
-    webhook_host = os.getenv("WEBHOOK_HOST", "0.0.0.0")
-    webhook_port = int(os.getenv("WEBHOOK_PORT", "8080"))
-    webhook_path = os.getenv("WEBHOOK_PATH", "/webhook")
-    webhook_secret = os.getenv("WEBHOOK_SECRET") or None
+    try:
+        webhook_port = int(_get_env("WEBHOOK_PORT", "8080"))
+    except ValueError as exc:
+        raise RuntimeError("WEBHOOK_PORT deve essere un intero") from exc
 
-    return BotConfig(
-        token=token,
-        db_host=os.getenv("DB_HOST", "postgre-sql"),
-        db_port=int(os.getenv("DB_PORT", "5432")),
-        db_name=os.getenv("DB_NAME", "telegram_bot"),
-        db_user=os.getenv("DB_USER", "telegram"),
-        db_password=os.getenv("DB_PASSWORD", "telegram"),
-        log_level=os.getenv("LOG_LEVEL", "INFO"),
-        webhook_url=webhook_url,
-        webhook_host=webhook_host,
-        webhook_port=webhook_port,
-        webhook_path=webhook_path,
-        webhook_secret_token=webhook_secret,
+    webhook_path = _get_env("WEBHOOK_PATH", "/telegram-bot/webhook").strip()
+    # Normalizza il path per assicurare che inizi con '/'
+    if not webhook_path.startswith("/"):
+        webhook_path = "/" + webhook_path
+
+    webhook_secret = _get_env("WEBHOOK_SECRET", "", required=False).strip() or None
+
+    # --- DB ---
+    try:
+        db_port = int(_get_env("DB_PORT", "5432"))
+    except ValueError as exc:
+        raise RuntimeError("DB_PORT deve essere un intero") from exc
+
+    db = DbConfig(
+        host=_get_env("DB_HOST", "postgre-sql"),
+        port=db_port,
+        name=_get_env("DB_NAME", "telegram_bot_db"),
+        user=_get_env("DB_USER", "telegram_bot_user"),
+        password=_get_env("DB_PASSWORD", "telegram_bot_password"),
     )
+
+    webhook = WebhookConfig(
+        url=webhook_url,
+        host=webhook_host,
+        port=webhook_port,
+        path=webhook_path,
+        secret=webhook_secret,
+    )
+
+    settings = Settings(
+        bot_token=bot_token,
+        log_level=log_level,
+        webhook=webhook,
+        db=db,
+    )
+
+    # Log di riepilogo (senza segreti)
+    _LOGGER.info(
+        "Configurazione caricata: db_host=%s db_name=%s webhook_url=%s log_level=%s",
+        settings.db.host,
+        settings.db.name,
+        settings.webhook.url,
+        settings.log_level,
+    )
+
+    return settings
