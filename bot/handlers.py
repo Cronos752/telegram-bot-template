@@ -43,7 +43,7 @@ async def admin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await update.effective_chat.send_message("❌ Non sei autorizzato a usare questo comando.")
         return
 
-    # Qui ci metterai la vera logica admin
+    # Qui potrai aggiungere la vera logica admin (pannello, statistiche, ecc.)
     await update.effective_chat.send_message("✅ Sei admin! Qui andranno i comandi amministratore.")
 
 
