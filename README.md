@@ -6,6 +6,25 @@ Questo progetto è un template minimale per un bot Telegram scritto in **Python*
 
 🔑 **Principio chiave:** tutte le variabili di configurazione (token, DB, credenziali, log, ecc.) vengono impostate **solo nel file `.env`**. Non è necessario (né consigliato) modificare `docker-compose.yml` o il codice Python per cambiare configurazione.
 
+---
+
+## Ambiente previsto
+
+Questo template dà per scontato che esista già un'infrastruttura Docker con:
+
+- un container PostgreSQL **già esistente** chiamato `postgre-sql`,
+- un network Docker esistente chiamato `postgre-sql-network`,
+- un network Docker esistente chiamato `nginx-network`, usato anche da Nginx Proxy Manager (o un altro reverse proxy) che gestirà il webhook del bot.
+
+Il container del bot verrà collegato a **entrambi** questi network:
+
+- `nginx-network` → per comunicare con Nginx Proxy Manager (webhook),
+- `postgre-sql-network` → per comunicare con il container `postgre-sql` che ospita il database.
+
+> ⚠️ Il template **non** crea un nuovo container PostgreSQL e **non** crea nuovi network. Usa solo risorse già esistenti.
+
+---
+
 ## Tecnologie principali
 
 - Python 3.12
@@ -13,7 +32,7 @@ Questo progetto è un template minimale per un bot Telegram scritto in **Python*
 - `SQLAlchemy >= 2.0`
 - `asyncpg >= 0.29`
 - Docker / Portainer
-- PostgreSQL
+- PostgreSQL (container esistente `postgre-sql`)
 
 ## Struttura del progetto
 
@@ -37,16 +56,20 @@ Questo progetto è un template minimale per un bot Telegram scritto in **Python*
         └── errors.py
 ```
 
+---
+
 ## Configurazione tramite `.env`
 
-Tutte le variabili usate da Postgres e dal bot vengono definite qui.
+Tutte le variabili usate dal bot vengono definite qui. Il database deve essere già stato creato all'interno del container `postgre-sql` con lo stesso nome/utente/password definiti nel `.env`.
+
+Esempio di `.env`:
 
 ```env
 # Token del bot Telegram
 BOT_TOKEN=your_bot_token_here
 
-# Configurazione database PostgreSQL
-DB_HOST=db
+# Configurazione database PostgreSQL (container esistente `postgre-sql`)
+DB_HOST=postgre-sql
 DB_PORT=5432
 DB_NAME=telegram_bot
 DB_USER=telegram
@@ -58,46 +81,46 @@ LOG_LEVEL=INFO
 
 Per cambiare token, nome DB, utente o password, **modifica solo questo file** e fai push sul repository Git.
 
+---
+
 ## docker-compose.yml (stack per Portainer)
 
-Lo stack usa il file `.env` sia per:
+Lo stack:
 
-- passare le variabili ai container,
-- risolvere i valori `POSTGRES_*` tramite sostituzione `${VAR}`.
+- **NON** crea un nuovo container PostgreSQL,
+- **NON** crea un nuovo network di default (`telegram_bot_default`),
+- collega il container del bot ai network già esistenti `nginx-network` e `postgre-sql-network`,
+- crea un container chiamato **esattamente** `telegram_bot`.
 
 ```yaml
 version: "3.9"
 
 services:
-  db:
-    image: postgres:16-alpine
-    container_name: telegram_bot_db
-    env_file:
-      - .env
-    environment:
-      POSTGRES_USER: ${DB_USER}
-      POSTGRES_PASSWORD: ${DB_PASSWORD}
-      POSTGRES_DB: ${DB_NAME}
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    ports:
-      - "5432:5432"
-    restart: unless-stopped
-
   bot:
     build: .
-    container_name: telegram_bot_app
+    container_name: telegram_bot
     env_file:
       - .env
-    depends_on:
-      - db
+    networks:
+      - default
+      - postgre-sql-network
     restart: unless-stopped
 
-volumes:
-  postgres_data:
+networks:
+  # Il network di default viene mappato al network esistente usato da Nginx Proxy Manager
+  default:
+    external: true
+    name: nginx-network
+
+  # Network esistente condiviso con il container PostgreSQL `postgre-sql`
+  postgre-sql-network:
+    external: true
 ```
 
-In questo file **non è necessario modificare nulla** per cambiare la configurazione.
+> ✅ Il container `telegram_bot` sarà raggiungibile da Nginx Proxy Manager tramite il network `nginx-network`.
+> ✅ Il container `telegram_bot` potrà raggiungere PostgreSQL usando `DB_HOST=postgre-sql` tramite il network `postgre-sql-network`.
+
+---
 
 ## Distribuzione con Portainer (Repository Git)
 
@@ -115,9 +138,11 @@ Quando vorrai aggiornare variabili (token, DB, ecc.):
 2. `git commit && git push`.
 3. Aggiorna/re-deploy lo stack da Portainer (o usa auto-update se configurato).
 
+---
+
 ## Comportamento del codice
 
 - `bot/config.py` legge tutte le variabili con `os.getenv(...)` (`BOT_TOKEN`, `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `LOG_LEVEL`).
 - `bot/main.py` non contiene alcun valore di configurazione hardcoded.
 
-In altre parole: una volta impostato il template, **non dovrai più entrare nei file Python per cambiare la configurazione**, ma solo nello `.env`.
+In altre parole: una volta impostato il template, **non dovrai più entrare nei file Python o nel `docker-compose.yml` per cambiare la configurazione**, ma solo nello `.env`.

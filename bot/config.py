@@ -8,7 +8,7 @@ import os
 Tutta la configurazione del bot viene letta da variabili d'ambiente.
 
 Quando distribuisci con Portainer (Stack), imposta queste variabili
-nel file di stack e **non** modificare i valori qui nel codice.
+nel file `.env` e **non** modificare i valori qui nel codice.
 """
 
 
@@ -36,7 +36,7 @@ def load_config() -> BotConfig:
     """Carica la configurazione dalle variabili d'ambiente.
 
     In caso di distribuzione tramite Portainer, tutte queste variabili
-    vanno impostate nello stack YAML o nel file `.env` referenziato.
+    vanno impostate nel file `.env` referenziato dallo stack.
     """
 
     token = os.getenv("BOT_TOKEN", "")
@@ -45,7 +45,7 @@ def load_config() -> BotConfig:
 
     return BotConfig(
         token=token,
-        db_host=os.getenv("DB_HOST", "db"),
+        db_host=os.getenv("DB_HOST", "postgre-sql"),
         db_port=int(os.getenv("DB_PORT", "5432")),
         db_name=os.getenv("DB_NAME", "telegram_bot"),
         db_user=os.getenv("DB_USER", "telegram"),
