@@ -5,6 +5,5 @@ __all__ = [
     "db",
     "auth",
     "handlers",
-    "message_view",
     "main",
 ]
