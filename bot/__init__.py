@@ -1,7 +1,5 @@
 """Package principale del bot Telegram."""
 
 __all__ = [
-    "__version__",
+    "config",
 ]
-
-__version__ = "0.1.0"
