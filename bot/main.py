@@ -34,7 +34,6 @@ def main() -> None:
     application = (
         Application.builder()
         .token(config.token)
-        .http_version(2)
         .build()
     )
 
