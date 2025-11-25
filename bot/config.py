@@ -55,11 +55,9 @@ def _get_env(name: str, default: str | None = None, *, required: bool = False) -
     Se `required` è True e la variabile non è presente o vuota,
     solleva RuntimeError (fail-fast).
     """
-
     value = os.getenv(name, default)
     if required and not value:
         raise RuntimeError(f"Missing required environment variable: {name}")
-    # se è None e non required, ritorno stringa vuota per semplicità
     return value or ""
 
 
