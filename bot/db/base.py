@@ -1,55 +1,36 @@
+"""Configurazione SQLAlchemy async."""
+
 from __future__ import annotations
 
-from typing import AsyncGenerator
+from typing import Final
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
 
-from ..config import BotConfig
+from bot.config import load_settings
+
+_settings = load_settings()
+
+DATABASE_URL: Final = (
+    f"postgresql+asyncpg://{_settings.db.user}:{_settings.db.password}"
+    f"@{_settings.db.host}:{_settings.db.port}/{_settings.db.name}"
+)
 
 
 class Base(DeclarativeBase):
     """Base declarativa per tutti i modelli SQLAlchemy."""
+    pass
 
 
-_sessionmaker: async_sessionmaker[AsyncSession] | None = None
+engine = create_async_engine(
+    DATABASE_URL,
+    echo=False,
+    pool_size=5,
+    max_overflow=10,
+)
 
-
-def init_engine(config: BotConfig):
-    """Inizializza l'engine asincrono e il sessionmaker globale.
-
-    Deve essere chiamata una sola volta all'avvio dell'applicazione.
-    """
-
-    global _sessionmaker
-
-    engine = create_async_engine(config.database_url, echo=False)
-    _sessionmaker = async_sessionmaker(engine, expire_on_commit=False)
-    return engine
-
-
-def get_sessionmaker() -> async_sessionmaker[AsyncSession]:
-    """Ritorna il sessionmaker globale.
-
-    Solleva un RuntimeError se l'engine non è ancora stato inizializzato.
-    """
-
-    if _sessionmaker is None:
-        raise RuntimeError("Database engine not initialized. Call init_engine() first.")
-    return _sessionmaker
-
-
-async def get_session() -> AsyncGenerator[AsyncSession, None]:
-    """Fornisce una sessione asincrona da usare con `async with`.
-
-    Esempio:
-
-    ```python
-    async for session in get_session():
-        ...
-    ```
-    """
-
-    sessionmaker = get_sessionmaker()
-    async with sessionmaker() as session:
-        yield session
+async_session_maker: async_sessionmaker[AsyncSession] = async_sessionmaker(
+    engine,
+    expire_on_commit=False,
+    class_=AsyncSession,
+)
